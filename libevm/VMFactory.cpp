@@ -46,28 +46,20 @@ static_assert(std::is_same<decltype(evmc_create_interpreter), evmc_create_fn>::v
 
 auto g_kind = VMKind::Legacy;
 
-/// A helper type to build the tabled of VM implementations.
-///
-/// More readable than std::tuple.
-/// Fields are not initialized to allow usage of construction with initializer lists {}.
-struct VMKindTableEntry
+struct VMMapEntry
 {
     VMKind kind;
-    const char* name;
+    std::function<evmc_create_fn> createFn;
 };
 
-/// The table of available VM implementations.
-///
-/// We don't use a map to avoid complex dynamic initialization. This list will never be long,
-/// so linear search only to parse command line arguments is not a problem.
-VMKindTableEntry vmKindsTable[] = {
-    {VMKind::Interpreter, "interpreter"},
-    {VMKind::Legacy, "legacy"},
+std::map<std::string, VMMapEntry> g_vmMap{
+    {"interpreter", {VMKind::Interpreter, {}}},
+    {"legacy", {VMKind::Legacy, {}}},
 #if ETH_EVMJIT
-    {VMKind::JIT, "jit"},
+    {"jit", {VMKind::JIT, {}}},
 #endif
 #if ETH_HERA
-    {VMKind::Hera, "hera"},
+    {"hera", {VMKind::Hera, {}}},
 #endif
 };
 }
@@ -81,17 +73,8 @@ void validate(boost::any& v, const std::vector<std::string>& values, VMKind* /* 
     // one string, it's an error, and exception will be thrown.
     const std::string& s = po::validators::get_single_string(values);
 
-    for (auto& entry : vmKindsTable)
-    {
-        // Try to find a match in the table of VMs.
-        if (s == entry.name)
-        {
-            v = entry.kind;
-            return;
-        }
-    }
-
-    throw po::validation_error(po::validation_error::invalid_option_value);
+    if (g_vmMap.count(s) == 0)
+        throw po::validation_error(po::validation_error::invalid_option_value);
 }
 
 namespace
@@ -137,8 +120,12 @@ void loadEvmcDlls(const std::vector<std::string>& _paths)
 
         auto createFn = dll::import<evmc_create_fn>(path, *it);
         evmc_instance* vm = createFn();
-        std::cout << "Loaded EVM " << vm->name << " " << vm->version << "\n";
+        std::string name = vm->name;
+        std::cout << "Loaded EVM " << name << " " << vm->version << "\n";
         vm->destroy(vm);
+
+        // It will overwrite existing entries.
+        g_vmMap[name] = {VMKind::DLL, std::move(createFn)};
     }
 }
 }
@@ -153,11 +140,11 @@ po::options_description vmProgramOptions(unsigned _lineLength)
     // It must be a static object because boost expects const char*.
     static const std::string description = [] {
         std::string names;
-        for (auto& entry : vmKindsTable)
+        for (auto& entry : g_vmMap)
         {
             if (!names.empty())
                 names += ", ";
-            names += entry.name;
+            names += entry.first;
         }
 
         return "Select VM implementation. Available options are: " + names + ".";

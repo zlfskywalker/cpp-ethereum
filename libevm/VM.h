@@ -93,7 +93,6 @@ private:
     void copyCode(int);
     typedef void (VM::*MemFnPtr)();
     MemFnPtr m_bounce = nullptr;
-    uint64_t m_nSteps = 0;
 
     // return bytes
     owning_bytes_ref m_output;
@@ -138,6 +137,15 @@ private:
     uint64_t m_runGas = 0;
     uint64_t m_newMemSize = 0;
     uint64_t m_copyMemSize = 0;
+
+    // EVMC tracing.
+    int m_step = 0;
+    evmc_trace_callback m_trace = nullptr;
+    evmc_tracer_context* m_traceContext = nullptr;
+    static void setTracer(evmc_instance* _instance, evmc_trace_callback _callback,
+        evmc_tracer_context* _context) noexcept;
+
+    void trace() noexcept;
 
     // initialize interpreter
     void initEntry();

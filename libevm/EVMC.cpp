@@ -21,6 +21,35 @@ EVM::EVM(evmc_instance* _instance) noexcept : m_instance(_instance)
         m_instance->set_option(m_instance, pair.first.c_str(), pair.second.c_str());
 }
 
+EVMC::EVMC(evmc_instance* _instance) : EVM(_instance)
+{
+    static constexpr auto tracer = [](evmc_tracer_context * context, int step, size_t code_offset,
+        evmc_status_code status_code, int64_t gas_left, size_t stack_num_items,
+        const evmc_uint256be* pushed_stack_item, size_t memory_size, size_t changed_memory_offset,
+        size_t changed_memory_size, const uint8_t* changed_memory) noexcept
+    {
+        EVMC* evmc = reinterpret_cast<EVMC*>(context);
+
+        // TODO: It might be easier to just pass instruction from VM.
+        char const* name = evmc->m_instructionNames[evmc->m_code[code_offset]];
+
+        std::cerr << "EVMC " << " " << step << " " << code_offset << " " << name << " " << status_code
+                  << " " << gas_left << " " << stack_num_items;
+
+        if (pushed_stack_item)
+            std::cerr << " +[" << fromEvmC(*pushed_stack_item) << "]";
+
+        std::cerr << " " << memory_size << "\n";
+
+        (void)changed_memory_offset;
+        (void)changed_memory_size;
+        (void)changed_memory_size;
+        (void)changed_memory;
+    };
+
+    _instance->set_tracer(_instance, tracer, reinterpret_cast<evmc_tracer_context*>(this));
+}
+
 owning_bytes_ref EVMC::exec(u256& io_gas, ExtVMFace& _ext, const OnOpFunc& _onOp)
 {
     assert(_ext.envInfo().number() >= 0);
@@ -35,8 +64,16 @@ owning_bytes_ref EVMC::exec(u256& io_gas, ExtVMFace& _ext, const OnOpFunc& _onOp
     assert(_ext.envInfo().gasLimit() <= int64max);
     assert(_ext.depth <= static_cast<size_t>(std::numeric_limits<int32_t>::max()));
 
+    m_code = bytesConstRef{&_ext.code};
+
+    // FIXME: EVMC revision found twice.
+    m_instructionNames = evmc_get_instruction_names_table(toRevision(_ext.evmSchedule()));
+
+
     auto gas = static_cast<int64_t>(io_gas);
+    std::cerr << "EVMC message START " << _ext.depth << " " << _ext.caller << " -> " << _ext.myAddress << " gas: " << gas << "\n";
     EVM::Result r = execute(_ext, gas);
+    std::cerr << "EVMC message END   " << _ext.depth << " status: " << r.status() << " gas left: " << r.gasLeft() << "\n";
 
     switch (r.status())
     {

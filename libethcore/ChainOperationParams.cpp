@@ -73,7 +73,8 @@ EVMSchedule const& ChainOperationParams::scheduleForBlockNumber(u256 const& _blo
 
 u256 ChainOperationParams::blockReward(EVMSchedule const& _schedule) const
 {
-	if (_schedule.blockRewardOverwrite)
+    //return 0;
+    if (_schedule.blockRewardOverwrite)
 		return *_schedule.blockRewardOverwrite;
 	else
 		return m_blockReward;

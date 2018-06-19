@@ -76,14 +76,13 @@ struct ChainOperationParams
 
 	/// General chain params.
 private:
-	u256 m_blockReward;
+    u256 m_blockReward = 5000000000000000000;
 public:
 	EVMSchedule const& scheduleForBlockNumber(u256 const& _blockNumber) const;
 	u256 blockReward(EVMSchedule const& _schedule) const;
-	void setBlockReward(u256 const& _newBlockReward);
-	u256 maximumExtraDataSize = 1024;
-	u256 accountStartNonce = 0;
-	bool tieBreakingGas = true;
+    void setBlockReward(u256 const& _newBlockReward);
+    u256 accountStartNonce = 0;
+    bool tieBreakingGas = true;
 	u256 minGasLimit;
 	u256 maxGasLimit;
 	u256 gasLimitBoundDivisor;
@@ -101,8 +100,8 @@ public:
 	u256 difficultyBoundDivisor;
 	u256 durationLimit;
 	bool allowFutureBlocks = false;
-
-	/// Precompiled contracts as specified in the chain params.
+    u256 maximumExtraDataSize = 32;
+    /// Precompiled contracts as specified in the chain params.
 	std::unordered_map<Address, PrecompiledContract> precompiled;
 };
 

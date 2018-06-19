@@ -30,9 +30,13 @@ RLP::RLP(bytesConstRef _d, Strictness _s):
 	m_data(_d)
 {
 	if ((_s & FailIfTooBig) && actualSize() < _d.size())
-	{
+    {
 		if (_s & ThrowOnFail)
-			BOOST_THROW_EXCEPTION(OversizeRLP());
+        {
+            std::stringstream s;
+            s <<"Actual size: " << actualSize() << ", data size: " << _d.size();
+            BOOST_THROW_EXCEPTION(OversizeRLP() << errinfo_comment(s.str()));
+        }
 		else
 			m_data.reset();
 	}

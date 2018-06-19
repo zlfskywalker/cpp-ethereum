@@ -31,12 +31,18 @@ namespace eth
 {
 
 DEV_SIMPLE_EXCEPTION(ChainParamsInvalid);
-DEV_SIMPLE_EXCEPTION(ChainParamsNotNoProof);
 
 class ClientTest: public Client
 {
 public:
-	/// Trivial forwarding constructor.
+    enum BlockStatus
+    {
+        Idle,
+        Mining,
+        Error,
+        Success
+    };
+    /// Trivial forwarding constructor.
 	ClientTest(
 		ChainParams const& _params,
 		int _networkID,
@@ -48,16 +54,17 @@ public:
 	);
 	~ClientTest();
 
-	void setChainParams(std::string const& _genesis);
-	void mineBlocks(unsigned _count);
+    void setChainParams(std::string const& _genesis);
+    void mineBlocks(unsigned _count);
 	void modifyTimestamp(int64_t _timestamp);
 	void rewindToBlock(unsigned _number);
-	bool addBlock(std::string const& _rlp);
-	bool completeSync();
+    bool completeSync();
+    BlockStatus getLastBlockStatus() const { return m_lastBlockStatus; }
 
 protected:
 	unsigned m_blocksToMine;
-	virtual void onNewBlocks(h256s const& _blocks, h256Hash& io_changed) override;
+    BlockStatus m_lastBlockStatus;
+    virtual void onNewBlocks(h256s const& _blocks, h256Hash& io_changed) override;
 };
 
 ClientTest& asClientTest(Interface& _c);

@@ -44,7 +44,9 @@ ClientTest::ClientTest(ChainParams const& _params, int _networkID, p2p::Host* _h
     TransactionQueue::Limits const& _limits)
   : Client(
         _params, _networkID, _host, _gpForAdoption, _dbPath, std::string(), _forceAction, _limits)
-{}
+{
+    m_lastBlockStatus = BlockStatus::Idle;
+}
 
 ClientTest::~ClientTest()
 {
@@ -58,8 +60,9 @@ void ClientTest::setChainParams(string const& _genesis)
     try
     {
         params = params.loadConfig(_genesis);
-        if (params.sealEngineName != "NoProof")
-            BOOST_THROW_EXCEPTION(ChainParamsNotNoProof() << errinfo_comment("Provided configuration is not well formatted."));
+        if (params.sealEngineName != "NoProof" && params.sealEngineName != "Ethash")
+            BOOST_THROW_EXCEPTION(ChainParamsInvalid() << errinfo_comment(
+                                      "Provided configuration is not well formatted."));
 
         reopenChain(params, WithExisting::Kill);
     }
@@ -67,16 +70,6 @@ void ClientTest::setChainParams(string const& _genesis)
     {
         BOOST_THROW_EXCEPTION(ChainParamsInvalid() << errinfo_comment("Provided configuration is not well formatted."));
     }
-}
-
-bool ClientTest::addBlock(string const& _rlp)
-{
-    if (auto h = m_host.lock())
-        h->noteNewBlocks();
-
-    bytes rlpBytes = fromHex(_rlp, WhenError::Throw);
-    RLP blockRLP(rlpBytes);
-    return (m_bq.import(blockRLP.data(), true) == ImportResult::Success);
 }
 
 void ClientTest::modifyTimestamp(int64_t _timestamp)
@@ -109,6 +102,7 @@ void ClientTest::modifyTimestamp(int64_t _timestamp)
 void ClientTest::mineBlocks(unsigned _count)
 {
     m_blocksToMine = _count;
+    m_lastBlockStatus = BlockStatus::Mining;
     startSealing();
 }
 
@@ -116,8 +110,11 @@ void ClientTest::onNewBlocks(h256s const& _blocks, h256Hash& io_changed)
 {
     Client::onNewBlocks(_blocks, io_changed);
 
-    if(--m_blocksToMine <= 0)
+    if (--m_blocksToMine <= 0)
+    {
+        m_lastBlockStatus = BlockStatus::Success;
         stopSealing();
+    }
 }
 
 bool ClientTest::completeSync()

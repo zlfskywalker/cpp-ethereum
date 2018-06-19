@@ -19,8 +19,9 @@
  * @date 2016
  */
 
-#include <libethereum/EthereumHost.h>
+#include <libdevcore/CommonJS.h>
 #include <libethereum/ClientTest.h>
+#include <libethereum/EthereumHost.h>
 #include <boost/filesystem/path.hpp>
 
 using namespace std;
@@ -67,16 +68,6 @@ void ClientTest::setChainParams(string const& _genesis)
     {
         BOOST_THROW_EXCEPTION(ChainParamsInvalid() << errinfo_comment("Provided configuration is not well formatted."));
     }
-}
-
-bool ClientTest::addBlock(string const& _rlp)
-{
-    if (auto h = m_host.lock())
-        h->noteNewBlocks();
-
-    bytes rlpBytes = fromHex(_rlp, WhenError::Throw);
-    RLP blockRLP(rlpBytes);
-    return (m_bq.import(blockRLP.data(), true) == ImportResult::Success);
 }
 
 void ClientTest::modifyTimestamp(int64_t _timestamp)
@@ -128,4 +119,30 @@ bool ClientTest::completeSync()
 
     h->completeSync();
     return true;
+}
+
+h256 ClientTest::importRawBlock(const string& _blockRLP)
+{
+    try
+    {
+        bytes blockBytes = jsToBytes(_blockRLP, OnFailed::Throw);
+        h256 blockHash = BlockHeader::headerHashFromBlock(blockBytes);
+        queueBlock(blockBytes, true);
+
+        if (auto h = m_host.lock())
+            h->noteNewBlocks();
+
+        bool moreToImport = true;
+        while (moreToImport)
+        {
+            tie(ignore, moreToImport, ignore) = syncQueue(100000);
+            this_thread::sleep_for(chrono::milliseconds(100));
+        }
+        return blockHash;
+    }
+    catch (std::exception const& ex)
+    {
+        cwarn << ex.what();
+        throw ex;
+    }
 }

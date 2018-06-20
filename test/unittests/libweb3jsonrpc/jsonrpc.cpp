@@ -27,6 +27,7 @@
 #include <libweb3jsonrpc/AccountHolder.h>
 #include <libweb3jsonrpc/AdminEth.h>
 #include <libweb3jsonrpc/AdminNet.h>
+#include <libweb3jsonrpc/Debug.h>
 #include <libweb3jsonrpc/Eth.h>
 #include <libweb3jsonrpc/ModularServer.h>
 #include <libweb3jsonrpc/Net.h>
@@ -88,11 +89,10 @@ struct JsonRpcFixture : public TestOutputHelperFixture
 
         web3->setIdealPeerCount(5);
 
-        dev::KeyPair coinbase = KeyPair::create();
         web3->ethereum()->setAuthor(coinbase.address());
 
         using FullServer = ModularServer<rpc::EthFace, rpc::NetFace, rpc::Web3Face,
-            rpc::AdminEthFace, rpc::AdminNetFace>;
+            rpc::AdminEthFace, rpc::AdminNetFace, rpc::DebugFace>;
 
         accountHolder.reset(new FixedAccountHolder([&]() { return web3->ethereum(); }, {}));
         sessionManager.reset(new rpc::SessionManager());
@@ -105,7 +105,7 @@ struct JsonRpcFixture : public TestOutputHelperFixture
         rpcServer.reset(
             new FullServer(ethFace, new rpc::Net(*web3), new rpc::Web3(web3->clientVersion()),
                 new rpc::AdminEth(*web3->ethereum(), *gasPricer, keyManager, *sessionManager.get()),
-                new rpc::AdminNet(*web3, *sessionManager)));
+                new rpc::AdminNet(*web3, *sessionManager), new rpc::Debug(*web3->ethereum())));
         auto ipcServer = new TestIpcServer;
         rpcServer->addConnector(ipcServer);
         ipcServer->StartListening();
@@ -115,6 +115,7 @@ struct JsonRpcFixture : public TestOutputHelperFixture
     }
 
     unique_ptr<WebThreeDirect> web3;
+    dev::KeyPair coinbase{KeyPair::create()};
     unique_ptr<FixedAccountHolder> accountHolder;
     unique_ptr<rpc::SessionManager> sessionManager;
     std::shared_ptr<eth::TrivialGasPricer> gasPricer;
@@ -363,7 +364,7 @@ BOOST_AUTO_TEST_CASE(contract_storage)
     BOOST_CHECK_EQUAL(storage, "0x0000000000000000000000000000000000000000000000000000000000000003");
 }
 
-BOOST_AUTO_TEST_CASE(sha3)
+BOOST_AUTO_TEST_CASE(web3_sha3)
 {
     string testString = "multiply(uint256)";
     h256 expected = dev::sha3(testString);
@@ -372,6 +373,26 @@ BOOST_AUTO_TEST_CASE(sha3)
     string result = rpcClient->web3_sha3(hexValue);
     BOOST_CHECK_EQUAL(toJS(expected), result);
     BOOST_CHECK_EQUAL("0xc6888fa159d67f77c2f3d7a402e199802766bd7e8d4d1ecd2274fc920265d56a", result);
+}
+
+BOOST_AUTO_TEST_CASE(debugAccountRangeAtFinalBlockState)
+{
+    string coinbaseHash = toString(sha3(coinbase.address()));
+
+    // coinbase doesn't exist in genesis
+    Json::Value result = rpcClient->debug_accountRangeAt("0", 0, "0", 100);
+    BOOST_CHECK(!result["addressMap"].isMember(coinbaseHash));
+
+    dev::eth::mine(*(web3->ethereum()), 1);
+
+    // coinbase doesn't exist in the beginning of the 1st block
+    result = rpcClient->debug_accountRangeAt("1", 0, "0", 100);
+    BOOST_CHECK(!result["addressMap"].isMember(coinbaseHash));
+
+    // coinbase exists after applying rewards in the 1st block
+    result = rpcClient->debug_accountRangeAt("1", 1, "0", 100);
+    std::cout << result.toStyledString();
+    BOOST_CHECK(result["addressMap"].isMember(coinbaseHash));
 }
 
 BOOST_AUTO_TEST_SUITE_END()

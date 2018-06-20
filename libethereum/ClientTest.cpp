@@ -58,8 +58,9 @@ void ClientTest::setChainParams(string const& _genesis)
     try
     {
         params = params.loadConfig(_genesis);
-        if (params.sealEngineName != "NoProof")
-            BOOST_THROW_EXCEPTION(ChainParamsNotNoProof() << errinfo_comment("Provided configuration is not well formatted."));
+        if (params.sealEngineName != "NoProof" && params.sealEngineName != "Ethash")
+            BOOST_THROW_EXCEPTION(
+                ChainParamsInvalid() << errinfo_comment("Seal engine is not supported!"));
 
         reopenChain(params, WithExisting::Kill);
     }
